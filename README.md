@@ -16,7 +16,7 @@ cp .env.example .env
 
 3. Update `.env` with your backend API URL if different:
 ```
-VITE_API_URL=http://localhost:8080/api
+VITE_API_URL=https://grabbi-backend.onrender.com/api
 ```
 
 4. Run the development server:
