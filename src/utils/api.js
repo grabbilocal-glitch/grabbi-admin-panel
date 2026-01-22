@@ -1,8 +1,17 @@
 import axios from 'axios'
 
+// Use relative path in development to leverage Vite proxy (avoid CORS)
+// Use full URL in production
+const isDevelopment = import.meta.env.DEV
+const baseURL = isDevelopment 
+  ? '/api' 
+  : (import.meta.env.VITE_API_URL || 'https://grabbi-backend.onrender.com/api')
+
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://grabbi-backend.onrender.com/api',
+  baseURL,
 })
+
+console.log('API Configuration:', { isDevelopment, baseURL })
 
 // Add token to requests if available
 const token = localStorage.getItem('admin_token')
