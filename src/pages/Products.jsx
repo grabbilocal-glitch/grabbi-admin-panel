@@ -26,8 +26,7 @@ export default function Products() {
   const [formData, setFormData] = useState({
     name: '',
     price: '',
-    image: null,
-    imageUrl: '',
+    images: [],
     category_id: '',
     stock: '',
     description: '',
@@ -36,6 +35,10 @@ export default function Products() {
     is_gluten_free: false,
     brand: '',
   })
+  const [imagesToDelete, setImagesToDelete] = useState([])
+  const [primaryImageId, setPrimaryImageId] = useState(null) // For existing images
+  const [primaryNewImageIndex, setPrimaryNewImageIndex] = useState(null) // For new images
+  const [fileInputKey, setFileInputKey] = useState(Date.now()) // Key to reset file input
 
   useEffect(() => {
     fetchCategories()
@@ -98,7 +101,11 @@ export default function Products() {
     if (!formData.price || parseFloat(formData.price) <= 0) errors.price = 'Valid price is required'
     if (!formData.category_id) errors.category_id = 'Category is required'
     if (formData.stock === '' || parseInt(formData.stock) < 0) errors.stock = 'Valid stock quantity is required'
-    if (!formData.image && !editingProduct) errors.image = 'Product image is required'
+    if (formData.images.length === 0 && !editingProduct) {
+      errors.images = 'At least one product image is required'
+    } else if (editingProduct && formData.images.length === 0 && (!formData.existingImages || formData.existingImages.length === 0)) {
+      errors.images = 'Product must have at least one image'
+    }
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -124,8 +131,26 @@ export default function Products() {
       data.append('is_vegan', formData.is_vegan)
       data.append('is_gluten_free', formData.is_gluten_free)
 
-      if (formData.image) {
-        data.append('image', formData.image)
+      // Handle primary image for new images
+      let imagesToUpload = [...formData.images]
+      if (primaryNewImageIndex !== null && primaryNewImageIndex > 0) {
+        const primaryImage = imagesToUpload[primaryNewImageIndex]
+        imagesToUpload = imagesToUpload.filter((_, i) => i !== primaryNewImageIndex)
+        imagesToUpload.unshift(primaryImage) // Put primary image first
+      }
+
+      // Append all images
+      imagesToUpload.forEach((image) => {
+        data.append('images', image)
+      })
+
+      // Append images to delete
+      imagesToDelete.forEach((imageId) => {
+        data.append('delete_images', imageId)
+      })
+
+      if (primaryImageId) {
+        data.append('primary_image_id', primaryImageId)
       }
 
       if (editingProduct) {
@@ -137,6 +162,9 @@ export default function Products() {
       setShowModal(false)
       resetForm()
       setFormErrors({})
+      setImagesToDelete([])
+      setPrimaryImageId(null)
+      setPrimaryNewImageIndex(null)
       fetchProducts()
       toast.success(editingProduct ? 'Product updated successfully' : 'Product created successfully')
     } catch (error) {
@@ -147,12 +175,16 @@ export default function Products() {
   }
 
   const handleEdit = (product) => {
+    // Find current primary image ID from existing images
+    const primaryImg = product.images?.find(img => img.is_primary)
     setEditingProduct(product)
+    setPrimaryImageId(primaryImg?.id || null)
+    setPrimaryNewImageIndex(null)
     setFormData({
       name: product.name,
       price: product.price,
-      image: null, 
-      imageUrl: product.image,
+      images: [],
+      existingImages: product.images || [],
       category_id: product.category_id,
       stock: product.stock,
       description: product.description,
@@ -181,7 +213,7 @@ export default function Products() {
     setFormData({
       name: '',
       price: '',
-      image: '',
+      images: [],
       category_id: '',
       stock: '',
       description: '',
@@ -314,9 +346,9 @@ export default function Products() {
               <li key={product.id} className="hover:bg-gray-50 transition-colors">
                 <div className="px-6 py-5 flex items-center justify-between">
                   <div className="flex items-center flex-1">
-                    {product.image ? (
+                    {product.images && product.images.length > 0 ? (
                       <img
-                        src={product.image}
+                        src={product.images.find(img => img.is_primary)?.image_url || product.images[0].image_url}
                         alt={product.name}
                         className="h-20 w-20 object-cover rounded-xl mr-4 shadow-sm border border-gray-200"
                       />
@@ -497,42 +529,118 @@ export default function Products() {
 
                   <div>
                       <label className="block text-sm font-medium text-gray-700">
-                        Product Image <span className="text-red-500">*</span>
+                        Product Images <span className="text-red-500">*</span>
                       </label>
 
                       <input
+                        key={fileInputKey}
                         type="file"
                         accept="image/*"
-                        required={!editingProduct}
+                        multiple
+                        required={!editingProduct && formData.images.length === 0}
                         onChange={(e) => {
-                          setFormData({ ...formData, image: e.target.files[0] })
+                          const files = Array.from(e.target.files)
+                          // Auto-select first image as primary if no primary selected
+                          if (formData.images.length === 0 && primaryNewImageIndex === null && (!formData.existingImages || formData.existingImages.length === 0)) {
+                            setPrimaryNewImageIndex(0)
+                          }
+                          setFormData({ ...formData, images: [...formData.images, ...files] })
+                          setFileInputKey(Date.now())
+                          // Clear error message when images are added
+                          if (formErrors.images && files.length > 0) {
+                            setFormErrors({ ...formErrors, images: '' })
+                          }
                         }}
                         className="input-field mt-2"
                       />
 
-                      {formData.image instanceof File && (
-                        <div className="mt-3">
-                          <img
-                            src={URL.createObjectURL(formData.image)}
-                            alt="Preview"
-                            className="h-32 w-32 object-cover rounded-lg border"
-                          />
+                      {/* Combined image display (existing + new) */}
+                      {editingProduct && (!formData.existingImages || formData.existingImages.length === 0) && formData.images.length === 0 ? (
+                        <p className="mt-3 text-sm text-amber-600 bg-amber-50 p-2 rounded">
+                          No images found. Please add at least one product image.
+                        </p>
+                      ) : ((editingProduct && formData.existingImages && formData.existingImages.length > 0) || formData.images.length > 0) ? (
+                        <div className="mt-3 grid grid-cols-4 gap-2">
+                          {/* Existing images */}
+                          {editingProduct && formData.existingImages && formData.existingImages.map((image) => (
+                            <div key={image.id} className="relative cursor-pointer" onClick={() => setPrimaryImageId(image.id)}>
+                              <img
+                                src={image.image_url}
+                                alt={image.id}
+                                className={`h-24 w-24 object-cover rounded-lg border ${primaryImageId === image.id ? 'ring-4 ring-blue-500' : ''}`}
+                              />
+                              {primaryImageId === image.id && (
+                                <span className="absolute top-1 left-1 bg-blue-500 text-white text-xs px-1 rounded">
+                                  Primary
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const newExistingImages = formData.existingImages.filter(img => img.id !== image.id)
+                                  setFormData({ ...formData, existingImages: newExistingImages })
+                                  setImagesToDelete([...imagesToDelete, image.id])
+                                  if (primaryImageId === image.id) {
+                                    // Auto-select next existing image as primary
+                                    if (newExistingImages.length > 0) {
+                                      setPrimaryImageId(newExistingImages[0].id)
+                                    } else {
+                                      setPrimaryImageId(null)
+                                    }
+                                  }
+                                }}
+                                className="absolute top-0 right-0 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow-lg"
+                              >
+                                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                          {/* New images */}
+                          {formData.images.map((image, index) => (
+                            <div key={`new-${index}`} className="relative cursor-pointer" onClick={() => setPrimaryNewImageIndex(index)}>
+                              <img
+                                src={URL.createObjectURL(image)}
+                                alt={`Preview ${index + 1}`}
+                                className={`h-24 w-24 object-cover rounded-lg border ${primaryNewImageIndex === index ? 'ring-4 ring-blue-500' : ''}`}
+                              />
+                              {primaryNewImageIndex === index && (
+                                <span className="absolute top-1 left-1 bg-blue-500 text-white text-xs px-1 rounded">
+                                  Primary
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const newImages = formData.images.filter((_, i) => i !== index)
+                                  setFormData({ ...formData, images: newImages })
+                                  if (primaryNewImageIndex === index) {
+                                    // Auto-select next new image as primary
+                                    if (newImages.length > 0) {
+                                      setPrimaryNewImageIndex(0)
+                                    } else {
+                                      setPrimaryNewImageIndex(null)
+                                    }
+                                  } else if (primaryNewImageIndex > index) {
+                                    setPrimaryNewImageIndex(primaryNewImageIndex - 1)
+                                  }
+                                }}
+                                className="absolute top-0 right-0 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow-lg"
+                              >
+                                <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                      )}
-
-                      {/* Existing image preview (edit mode) */}
-                      {!formData.image && formData.imageUrl && (
-                        <div className="mt-3">
-                          <img
-                            src={formData.imageUrl}
-                            alt="Existing product"
-                            className="h-32 w-32 object-cover rounded-lg border"
-                          />
-                        </div>
-                      )}
+                      ) : null}
                 
-                    {formErrors.image && (
-                      <p className="mt-1 text-sm text-red-600">{formErrors.image}</p>
+                    {formErrors.images && (
+                      <p className="mt-1 text-sm text-red-600">{formErrors.images}</p>
                     )}
                   </div>
 

@@ -71,12 +71,22 @@ export default function OrderDetails({ order, isExpanded, onToggle }) {
                     className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-lg"
                   >
                     <div className="flex items-center flex-1">
-                      {item.product?.image && (
+                      {item.image_url ? (
                         <img
-                          src={item.product.image}
+                          src={item.image_url}
+                          alt={item.product?.name || 'Product'}
+                          className="h-12 w-12 object-cover rounded-md mr-3"
+                        />
+                      ) : item.product?.images && item.product.images.length > 0 ? (
+                        <img
+                          src={item.product.images[0].image_url}
                           alt={item.product.name}
                           className="h-12 w-12 object-cover rounded-md mr-3"
                         />
+                      ) : (
+                        <div className="h-12 w-12 rounded-md mr-3 bg-gray-100 flex items-center justify-center">
+                          <span className="text-gray-400 text-xs">No image</span>
+                        </div>
                       )}
                       <div>
                         <p className="text-sm font-medium text-gray-900">
