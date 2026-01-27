@@ -20,6 +20,7 @@ export default function Promotions() {
     description: '',
     image: null,
     is_active: true,
+    product_url: '',
   })
 
   useEffect(() => {
@@ -63,6 +64,7 @@ export default function Promotions() {
       payload.append('title', formData.title)
       payload.append('description', formData.description)
       payload.append('is_active', formData.is_active)
+      payload.append('product_url', formData.product_url)
 
       if (formData.image instanceof File) {
         payload.append('image', formData.image)
@@ -97,6 +99,7 @@ export default function Promotions() {
       description: promotion.description,
       image: null,
       is_active: promotion.is_active,
+      product_url: promotion.product_url || '',
     })
     setShowModal(true)
   }
@@ -115,7 +118,7 @@ export default function Promotions() {
   }
 
   const resetForm = () => {
-    setFormData({ title: '', description: '', image: '', is_active: true })
+    setFormData({ title: '', description: '', image: '', is_active: true, product_url: '' })
     setEditingPromotion(null)
     setFormErrors({})
   }
@@ -311,6 +314,27 @@ export default function Promotions() {
                         />
                       </div>
                     )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      URL
+                    </label>
+                    <input
+                      type="url"
+                      value={formData.product_url}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          product_url: e.target.value,
+                        })
+                      }
+                      className="input-field mt-2"
+                      placeholder="https://example.com/product"
+                    />
+                    <p className="mt-1 text-sm text-gray-500">
+                      Enter a URL where users will be directed when they click this promotion
+                    </p>
                   </div>
 
                   <div>

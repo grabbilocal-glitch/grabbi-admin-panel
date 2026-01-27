@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../utils/api'
-import { PencilIcon, TrashIcon, PlusIcon, TagIcon } from '@heroicons/react/24/outline'
+import { PencilIcon, TrashIcon, PlusIcon, TagIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 import { useToast } from '../contexts/ToastContext'
 import LoadingSpinner from '../components/UI/LoadingSpinner'
 import { SkeletonList } from '../components/UI/Skeleton'
@@ -9,16 +9,20 @@ import ConfirmDialog from '../components/UI/ConfirmDialog'
 export default function Categories() {
   const toast = useToast()
   const [categories, setCategories] = useState([])
+  const [subcategories, setSubcategories] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingCategory, setEditingCategory] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, categoryId: null })
   const [formErrors, setFormErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
+  const [selectedParentCategory, setSelectedParentCategory] = useState('')
+  const [isAddingSubCategory, setIsAddingSubCategory] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     icon: '',
     description: '',
+    category_id: '',
   })
 
   useEffect(() => {
@@ -28,8 +32,12 @@ export default function Categories() {
   const fetchCategories = async () => {
     try {
       setLoading(true)
-      const response = await api.get('/categories')
-      setCategories(response.data || [])
+      const [categoriesRes, subcategoriesRes] = await Promise.all([
+        api.get('/categories'),
+        api.get('/subcategories')
+      ])
+      setCategories(categoriesRes.data || [])
+      setSubcategories(subcategoriesRes.data || [])
     } catch (error) {
       toast.error(error.message || 'Failed to fetch categories')
     } finally {
@@ -37,9 +45,30 @@ export default function Categories() {
     }
   }
 
+  // Get subcategories for a specific category
+  const getSubcategoriesForCategory = (categoryId) => {
+    return subcategories.filter(sub => sub.category_id === categoryId)
+  }
+
+  // Build hierarchical tree for display
+  const buildCategoryTree = () => {
+    return categories.map(category => ({
+      ...category,
+      subcategories: getSubcategoriesForCategory(category.id)
+    }))
+  }
+
   const validateForm = () => {
     const errors = {}
     if (!formData.name.trim()) errors.name = 'Name is required'
+    if (isAddingSubCategory && !editingCategory && !selectedParentCategory) {
+      errors.category_id = 'Parent category is required for subcategories'
+    }
+    // Only validate parent category if editing a subcategory
+    if (editingCategory && editingCategory.category_id && selectedParentCategory && selectedParentCategory === editingCategory.id) {
+      // This shouldn't happen since we're editing a subcategory, but keep as safety check
+      errors.category_id = 'Invalid parent category selection'
+    }
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -53,17 +82,57 @@ export default function Categories() {
 
     try {
       setSubmitting(true)
+      
       if (editingCategory) {
-        await api.put(`/admin/categories/${editingCategory.id}`, formData)
+        // Check if editing a category or subcategory
+        if (editingCategory.category_id) {
+          // Editing subcategory
+          const submitData = {
+            name: formData.name,
+            icon: formData.icon,
+            description: formData.description,
+            category_id: selectedParentCategory,
+          }
+          await api.put(`/admin/subcategories/${editingCategory.id}`, submitData)
+          toast.success('Subcategory updated successfully')
+        } else {
+          // Editing main category
+          const submitData = {
+            name: formData.name,
+            icon: formData.icon,
+            description: formData.description,
+          }
+          await api.put(`/admin/categories/${editingCategory.id}`, submitData)
+          toast.success('Category updated successfully')
+        }
       } else {
-        await api.post('/admin/categories', formData)
+        // Creating new
+        if (isAddingSubCategory) {
+          // Creating subcategory
+          const submitData = {
+            name: formData.name,
+            icon: formData.icon,
+            description: formData.description,
+            category_id: selectedParentCategory,
+          }
+          await api.post('/admin/subcategories', submitData)
+          toast.success('Subcategory created successfully')
+        } else {
+          // Creating main category
+          const submitData = {
+            name: formData.name,
+            icon: formData.icon,
+            description: formData.description,
+          }
+          await api.post('/admin/categories', submitData)
+          toast.success('Category created successfully')
+        }
       }
 
       setShowModal(false)
       resetForm()
       setFormErrors({})
       fetchCategories()
-      toast.success(editingCategory ? 'Category updated successfully' : 'Category created successfully')
     } catch (error) {
       toast.error(error.message || 'Failed to save category')
     } finally {
@@ -71,13 +140,30 @@ export default function Categories() {
     }
   }
 
-  const handleEdit = (category) => {
-    setEditingCategory(category)
+  const handleEdit = (item) => {
+    setEditingCategory(item)
+    setIsAddingSubCategory(!!item.category_id)
+    setSelectedParentCategory(item.category_id || '')
     setFormData({
-      name: category.name,
-      icon: category.icon,
-      description: category.description,
+      name: item.name,
+      icon: item.icon,
+      description: item.description,
+      category_id: item.category_id || '',
     })
+    setShowModal(true)
+  }
+
+  const handleAddCategory = () => {
+    resetForm()
+    setIsAddingSubCategory(false)
+    setSelectedParentCategory('')
+    setShowModal(true)
+  }
+
+  const handleAddSubCategory = () => {
+    resetForm()
+    setIsAddingSubCategory(true)
+    setSelectedParentCategory('')
     setShowModal(true)
   }
 
@@ -85,20 +171,40 @@ export default function Categories() {
     if (!deleteConfirm.categoryId) return
 
     try {
-      await api.delete(`/admin/categories/${deleteConfirm.categoryId}`)
+      // Check if it's a category or subcategory
+      const item = [...categories, ...subcategories].find(i => i.id === deleteConfirm.categoryId)
+      if (item?.category_id) {
+        await api.delete(`/admin/subcategories/${deleteConfirm.categoryId}`)
+        toast.success('Subcategory deleted successfully')
+      } else {
+        await api.delete(`/admin/categories/${deleteConfirm.categoryId}`)
+        toast.success('Category deleted successfully')
+      }
       fetchCategories()
-      toast.success('Category deleted successfully')
       setDeleteConfirm({ isOpen: false, categoryId: null })
     } catch (error) {
-      toast.error(error.message || 'Failed to delete category')
+      toast.error(error.message || 'Failed to delete')
     }
   }
 
   const resetForm = () => {
-    setFormData({ name: '', icon: '', description: '' })
+    setFormData({ name: '', icon: '', description: '', category_id: '' })
+    setSelectedParentCategory('')
     setEditingCategory(null)
+    setIsAddingSubCategory(false)
     setFormErrors({})
   }
+
+  // Get available parent categories
+  const getAvailableParentCategories = () => {
+    if (!editingCategory) {
+      return categories
+    }
+    // When editing, exclude the current category from parent options
+    return categories.filter(cat => cat.id !== editingCategory.id)
+  }
+
+  const availableParents = getAvailableParentCategories()
 
   if (loading) {
     return (
@@ -111,6 +217,8 @@ export default function Categories() {
     )
   }
 
+  const categoryTree = buildCategoryTree()
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -118,16 +226,22 @@ export default function Categories() {
           <h1 className="text-4xl font-bold text-gray-900 mb-2">Categories</h1>
           <p className="text-gray-600">Organize your products into categories</p>
         </div>
-        <button
-          onClick={() => {
-            resetForm()
-            setShowModal(true)
-          }}
-          className="btn-primary"
-        >
-          <PlusIcon className="h-5 w-5 mr-2" />
-          Add Category
-        </button>
+        <div className="flex space-x-3">
+          <button
+            onClick={handleAddCategory}
+            className="btn-primary"
+          >
+            <PlusIcon className="h-5 w-5 mr-2" />
+            Add Category
+          </button>
+          <button
+            onClick={handleAddSubCategory}
+            className="btn-secondary"
+          >
+            <PlusIcon className="h-5 w-5 mr-2" />
+            Add Sub Category
+          </button>
+        </div>
       </div>
 
       {categories.length === 0 ? (
@@ -139,14 +253,15 @@ export default function Categories() {
       ) : (
         <div className="card overflow-hidden">
           <ul className="divide-y divide-gray-100">
-            {categories.map((category) => (
-              <li key={category.id} className="hover:bg-gray-50 transition-colors">
+            {categoryTree.map((mainCategory) => (
+              <li key={mainCategory.id} className="hover:bg-gray-50 transition-colors">
+                {/* Main Category */}
                 <div className="px-6 py-5 flex items-center justify-between">
                   <div className="flex items-center flex-1">
-                    {category.icon ? (
+                    {mainCategory.icon ? (
                       <div className="flex-shrink-0 mr-4">
                         <div className="h-16 w-16 rounded-xl bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center text-3xl border-2 border-indigo-200 shadow-sm">
-                          {category.icon}
+                          {mainCategory.icon}
                         </div>
                       </div>
                     ) : (
@@ -158,30 +273,89 @@ export default function Categories() {
                     )}
                     <div>
                       <p className="text-base font-semibold text-gray-900">
-                        {category.name}
+                        {mainCategory.name}
                       </p>
-                      {category.description && (
+                      {mainCategory.description && (
                         <p className="text-sm text-gray-600 mt-1">
-                          {category.description}
+                          {mainCategory.description}
+                        </p>
+                      )}
+                      {mainCategory.subcategories && mainCategory.subcategories.length > 0 && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          {mainCategory.subcategories.length} subcategor{mainCategory.subcategories.length === 1 ? 'y' : 'ies'}
                         </p>
                       )}
                     </div>
                   </div>
                   <div className="flex space-x-2">
                     <button
-                      onClick={() => handleEdit(category)}
+                      onClick={() => handleEdit(mainCategory)}
                       className="p-2 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-all duration-200"
                     >
                       <PencilIcon className="h-5 w-5" />
                     </button>
                     <button
-                      onClick={() => setDeleteConfirm({ isOpen: true, categoryId: category.id })}
+                      onClick={() => setDeleteConfirm({ isOpen: true, categoryId: mainCategory.id })}
                       className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-all duration-200"
                     >
                       <TrashIcon className="h-5 w-5" />
                     </button>
                   </div>
                 </div>
+
+                {/* Subcategories */}
+                {mainCategory.subcategories && mainCategory.subcategories.length > 0 && (
+                  <ul className="divide-y divide-gray-50 bg-gray-50">
+                    {mainCategory.subcategories.map((subcategory) => (
+                      <li key={subcategory.id} className="hover:bg-gray-100 transition-colors">
+                        <div className="px-6 py-4 flex items-center justify-between">
+                          <div className="flex items-center flex-1">
+                            <div className="flex items-center">
+                              <ChevronRightIcon className="h-5 w-5 text-gray-400 mr-2" />
+                              {subcategory.icon ? (
+                                <div className="flex-shrink-0 mr-4">
+                                  <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-indigo-50 to-purple-50 flex items-center justify-center text-2xl border border-indigo-100">
+                                    {subcategory.icon}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex-shrink-0 mr-4">
+                                  <div className="h-12 w-12 rounded-lg bg-gray-100 flex items-center justify-center">
+                                    <TagIcon className="h-6 w-6 text-gray-400" />
+                                  </div>
+                                </div>
+                              )}
+                              <div>
+                                <p className="text-sm font-medium text-gray-800">
+                                  {subcategory.name}
+                                </p>
+                                {subcategory.description && (
+                                  <p className="text-xs text-gray-600 mt-0.5">
+                                    {subcategory.description}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleEdit(subcategory)}
+                              className="p-1.5 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-all duration-200"
+                            >
+                              <PencilIcon className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirm({ isOpen: true, categoryId: subcategory.id })}
+                              className="p-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-all duration-200"
+                            >
+                              <TrashIcon className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>
@@ -201,9 +375,17 @@ export default function Categories() {
               <form onSubmit={handleSubmit} className="p-8">
                 <div className="mb-6">
                   <h3 id="category-modal-title" className="text-2xl font-bold text-gray-900 mb-2">
-                    {editingCategory ? 'Edit Category' : 'Add Category'}
+                    {editingCategory 
+                      ? 'Edit Category' 
+                      : (isAddingSubCategory ? 'Add Sub Category' : 'Add Category')
+                    }
                   </h3>
-                  <p className="text-sm text-gray-600">Fill in the category details below</p>
+                  <p className="text-sm text-gray-600">
+                    {editingCategory 
+                      ? 'Update the category details below' 
+                      : (isAddingSubCategory ? 'Fill in the subcategory details below' : 'Fill in the category details below')
+                    }
+                  </p>
                 </div>
 
                 <div className="space-y-4">
@@ -225,6 +407,39 @@ export default function Categories() {
                       <p className="mt-1 text-sm text-red-600">{formErrors.name}</p>
                     )}
                   </div>
+
+                  {(isAddingSubCategory || editingCategory) && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Parent Category {isAddingSubCategory && !editingCategory && <span className="text-red-500">*</span>}
+                      </label>
+                      <select
+                        value={selectedParentCategory}
+                        onChange={(e) => {
+                          setSelectedParentCategory(e.target.value)
+                          if (formErrors.category_id) setFormErrors({ ...formErrors, category_id: '' })
+                        }}
+                        className={`input-field mt-2 ${formErrors.category_id ? 'input-field-error' : ''}`}
+                        required={isAddingSubCategory && !editingCategory}
+                      >
+                        <option value="">None (Main Category)</option>
+                        {availableParents.map((cat) => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.name}
+                          </option>
+                        ))}
+                      </select>
+                      {formErrors.category_id && (
+                        <p className="mt-1 text-sm text-red-600">{formErrors.category_id}</p>
+                      )}
+                      <p className="mt-1 text-xs text-gray-500">
+                        {isAddingSubCategory && !editingCategory 
+                          ? 'Select a parent category for this subcategory'
+                          : 'Select a parent category to create a subcategory'
+                        }
+                      </p>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700">
