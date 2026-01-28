@@ -60,11 +60,7 @@ export default function Products() {
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, categoryFilter, stockFilter, statusFilter, dietaryFilter])
-
-  useEffect(() => {
-    fetchProducts()
-  }, [currentPage, categoryFilter, statusFilter])
+  }, [categoryFilter, stockFilter, statusFilter, dietaryFilter])
 
   const fetchProducts = async () => {
     try {
@@ -92,10 +88,28 @@ export default function Products() {
         })
       }
 
+      if (statusFilter !== 'all') {
+        fetchedProducts = fetchedProducts.filter(p => p.status === statusFilter)
+      }
+
       if (dietaryFilter === 'gluten_free') {
-        fetchedProducts = fetchedProducts.filter(p => p.is_gluten_free)
+        const filtered = fetchedProducts.filter(p => {
+          const value = Boolean(p.is_gluten_free)
+          return value
+        })
+        fetchedProducts = filtered
       } else if (dietaryFilter === 'vegetarian') {
-        fetchedProducts = fetchedProducts.filter(p => p.is_vegetarian || p.is_vegan)
+        const filtered = fetchedProducts.filter(p => {
+          const value = Boolean(p.is_vegetarian)
+          return value
+        })
+        fetchedProducts = filtered
+      } else if (dietaryFilter === 'vegan') {
+        const filtered = fetchedProducts.filter(p => {
+          const value = Boolean(p.is_vegan)
+          return value
+        })
+        fetchedProducts = filtered
       }
 
       setProducts(fetchedProducts)
@@ -106,6 +120,10 @@ export default function Products() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    fetchProducts()
+  }, [currentPage, categoryFilter, statusFilter, dietaryFilter, stockFilter])
 
   const fetchAllProducts = async () => {
     try {
@@ -277,6 +295,7 @@ export default function Products() {
                   <option value="all">All</option>
                   <option value="gluten_free">Gluten Free</option>
                   <option value="vegetarian">Vegetarian</option>
+                  <option value="vegan">Vegan</option>
                 </select>
               </div>
             </div>
@@ -387,9 +406,14 @@ export default function Products() {
                                 GF
                               </span>
                             )}
-                            {(product.is_vegetarian || product.is_vegan) && (
+                            {product.is_vegetarian && (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
                                 V
+                              </span>
+                            )}
+                            {product.is_vegan && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
+                                Vg
                               </span>
                             )}
                           </div>

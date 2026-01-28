@@ -296,6 +296,7 @@ export default function ProductFormModal({
     data.append('country_of_origin', formData.country_of_origin)
     data.append('is_gluten_free', formData.is_gluten_free)
     data.append('is_vegetarian', formData.is_vegetarian)
+    data.append('is_vegan', formData.is_vegan)
     data.append('is_age_restricted', formData.is_age_restricted)
     if (formData.minimum_age) data.append('minimum_age', formData.minimum_age)
     data.append('allergen_info', formData.allergen_info)
@@ -942,6 +943,16 @@ export default function ProductFormModal({
                     <div className="flex items-center">
                       <input
                         type="checkbox"
+                        id="vegan"
+                        checked={formData.is_vegan}
+                        onChange={(e) => setFormData({ ...formData, is_vegan: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <label htmlFor="vegan" className="text-sm text-gray-700">Vegan</label>
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
                         id="age_restricted"
                         checked={formData.is_age_restricted}
                         onChange={(e) => setFormData({ ...formData, is_age_restricted: e.target.checked })}
@@ -949,9 +960,11 @@ export default function ProductFormModal({
                       />
                       <label htmlFor="age_restricted" className="text-sm text-gray-700">Age Restricted</label>
                     </div>
-                    <div>
+                  </div>
+                  {formData.is_age_restricted && (
+                    <div className="mt-4">
                       <label className="block text-sm font-medium text-gray-700">
-                        Minimum Age
+                        Minimum Age <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="number"
@@ -966,7 +979,7 @@ export default function ProductFormModal({
                       />
                       {formErrors.minimum_age && <p className="mt-1 text-sm text-red-600">{formErrors.minimum_age}</p>}
                     </div>
-                  </div>
+                  )}
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Allergen Information</label>
                     <textarea
