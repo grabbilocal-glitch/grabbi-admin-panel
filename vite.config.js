@@ -7,15 +7,14 @@ export default defineConfig({
     port: 5174,
     proxy: {
       '/api': {
-        target: 'https://grabbi-backend.onrender.com',
+        target: 'http://localhost:8080',
         changeOrigin: true,
-        secure: true,
+        secure: false,
         configure: (proxy, options) => {
           proxy.on('proxyReq', (proxyReq, req, res) => {
             console.log('Proxying request:', req.method, req.url);
           });
           proxy.on('proxyRes', (proxyRes, req, res) => {
-            // Add CORS headers
             proxyRes.headers['Access-Control-Allow-Origin'] = '*';
             proxyRes.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS';
             proxyRes.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
@@ -26,5 +25,11 @@ export default defineConfig({
         }
       }
     }
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.js',
+    css: true,
   },
 })

@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useEffect } from 'react'
 import { api } from '../../utils/api'
 import { useToast } from '../../contexts/ToastContext'
 import ExcelJS from 'exceljs'
@@ -9,6 +9,15 @@ export default function ProductImportExport({ categories, subcategories, onImpor
   const toast = useToast()
   const pollingIntervalRef = useRef(null)
   const excelInputRef = useRef(null)
+
+  // Clean up polling interval on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+      }
+    }
+  }, [])
 
   const downloadExcel = async () => {
     try {
@@ -33,7 +42,7 @@ export default function ProductImportExport({ categories, subcategories, onImpor
         'Supplier', 'Country of Origin', 'Brand', 'Pack Size',
         'Gluten Free', 'Vegetarian', 'Vegan', 'Age Restricted', 'Minimum Age',
         'Allergen Info', 'Storage Type', 'Own Brand', 'Online Visible', 'Status',
-        'Barcode', 'Batch Number', 'Category*', 'Subcategory', 'Image URLs (add each URL after a new line)', 'Notes'
+        'Barcode', 'Batch Number', 'Category*', 'Subcategory', 'Franchise', 'Image URLs (add each URL after a new line)', 'Notes'
       ]
       worksheet.addRow(headers)
 
@@ -89,6 +98,7 @@ export default function ProductImportExport({ categories, subcategories, onImpor
         { width: 20 },  // Batch Number
         { width: 15 },  // Category
         { width: 15 },  // Subcategory
+        { width: 25 },  // Franchise
         { width: 60 },  // Image URLs
         { width: 30 },  // Notes
       ]
@@ -144,6 +154,7 @@ export default function ProductImportExport({ categories, subcategories, onImpor
           product.batch_number || '',
           product.category?.name || product.category_id || '',
           subcategoryName,
+          '', // Franchise - populated by user
           imageUrls,
           product.notes || '',
         ])
@@ -213,7 +224,6 @@ export default function ProductImportExport({ categories, subcategories, onImpor
 
       toast.success('Products exported successfully')
     } catch (error) {
-      console.error('Export error:', error)
       toast.error(error.message || 'Failed to export products')
     } finally {
       onExportComplete?.({ loading: false })
@@ -266,7 +276,6 @@ export default function ProductImportExport({ categories, subcategories, onImpor
         }, 3000)
       }
     } catch (error) {
-      console.error('Error polling job status:', error)
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current)
         pollingIntervalRef.current = null
@@ -459,9 +468,16 @@ export default function ProductImportExport({ categories, subcategories, onImpor
                 barcode: String(row['Barcode'] || ''),
                 batch_number: String(row['Batch Number'] || ''),
                 category_id: row['category_id'],
-                subcategory_id: row['Subcategory'] ? null : null,
+                subcategory_id: row['Subcategory']
+                  ? (subcategories.find(sub =>
+                      sub.name.toLowerCase() === String(row['Subcategory']).toLowerCase().trim()
+                    )?.id || null)
+                  : null,
                 image_urls: imageUrls,
                 images_provided: true,
+                franchise_ids: row['Franchise']
+                  ? String(row['Franchise']).split(',').map(f => f.trim()).filter(Boolean)
+                  : [],
                 notes: row['Notes'] || '',
                 delete: row['Delete?']?.toString().toLowerCase() === 'yes' || false,
               })
@@ -532,7 +548,6 @@ export default function ProductImportExport({ categories, subcategories, onImpor
             onImportComplete?.({ status: 'close-modal' })
           }
         } catch (error) {
-          console.error('Error processing Excel:', error)
           toast.error(error.response?.data?.error || error.message || 'Failed to process Excel file')
           onImportComplete?.({ status: 'close-modal' })
         } finally {
@@ -543,7 +558,6 @@ export default function ProductImportExport({ categories, subcategories, onImpor
 
       reader.readAsArrayBuffer(file)
     } catch (error) {
-      console.error('Error reading file:', error)
       toast.error('Failed to read Excel file')
       onImportComplete?.({ loading: false })
       e.target.value = ''

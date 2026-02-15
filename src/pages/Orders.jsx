@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { api } from '../utils/api'
 import { useToast } from '../contexts/ToastContext'
 import { SkeletonList } from '../components/UI/Skeleton'
@@ -23,17 +23,21 @@ export default function Orders() {
   const [expandedOrders, setExpandedOrders] = useState(new Set())
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [franchiseFilter, setFranchiseFilter] = useState('all')
+  const [franchises, setFranchises] = useState([])
   const [showFilters, setShowFilters] = useState(false)
+  const [updatingOrderId, setUpdatingOrderId] = useState(null)
 
-  useEffect(() => {
-    fetchOrders()
+  const fetchFranchises = useCallback(async () => {
+    try {
+      const response = await api.get('/admin/franchises')
+      setFranchises(response.data || [])
+    } catch {
+      console.warn('Failed to fetch franchises for filter dropdown')
+    }
   }, [])
 
-  useEffect(() => {
-    filterOrders()
-  }, [orders, searchTerm, statusFilter])
-
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       setLoading(true)
       const response = await api.get('/orders')
@@ -43,9 +47,14 @@ export default function Orders() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
 
-  const filterOrders = () => {
+  useEffect(() => {
+    fetchOrders()
+    fetchFranchises()
+  }, [fetchOrders, fetchFranchises])
+
+  const filterOrders = useCallback(() => {
     let filtered = [...orders]
 
     // Search filter
@@ -65,16 +74,30 @@ export default function Orders() {
       filtered = filtered.filter((order) => order.status === statusFilter)
     }
 
+    // Franchise filter
+    if (franchiseFilter !== 'all') {
+      filtered = filtered.filter(
+        (order) => String(order.franchise?.id || order.franchise_id) === String(franchiseFilter)
+      )
+    }
+
     setFilteredOrders(filtered)
-  }
+  }, [orders, searchTerm, statusFilter, franchiseFilter])
+
+  useEffect(() => {
+    filterOrders()
+  }, [filterOrders])
 
   const updateStatus = async (orderId, newStatus) => {
     try {
+      setUpdatingOrderId(orderId)
       await api.put(`/admin/orders/${orderId}/status`, { status: newStatus })
       await fetchOrders()
       toast.success('Order status updated successfully')
     } catch (error) {
       toast.error(error.message || 'Failed to update status')
+    } finally {
+      setUpdatingOrderId(null)
     }
   }
 
@@ -166,11 +189,29 @@ export default function Orders() {
                   ))}
                 </select>
               </div>
-              {(statusFilter !== 'all' || searchTerm) && (
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Franchise
+                </label>
+                <select
+                  value={franchiseFilter}
+                  onChange={(e) => setFranchiseFilter(e.target.value)}
+                  className="input-field"
+                >
+                  <option value="all">All Franchises</option>
+                  {franchises.map((franchise) => (
+                    <option key={franchise.id} value={franchise.id}>
+                      {franchise.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {(statusFilter !== 'all' || franchiseFilter !== 'all' || searchTerm) && (
                 <div className="flex items-end">
                   <button
                     onClick={() => {
                       setStatusFilter('all')
+                      setFranchiseFilter('all')
                       setSearchTerm('')
                     }}
                     className="btn-secondary"
@@ -223,6 +264,13 @@ export default function Orders() {
                           <p className="text-sm text-gray-600">
                             {order.items?.length || 0} items • {order.user?.name || 'Customer'} • {order.delivery_address}
                           </p>
+                          {order.franchise && (
+                            <p className="text-sm text-gray-500">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-teal-100 text-teal-800">
+                                {order.franchise.name || 'Unknown Franchise'}
+                              </span>
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="text-right ml-6">
@@ -232,7 +280,8 @@ export default function Orders() {
                         <select
                           value={order.status}
                           onChange={(e) => updateStatus(order.id, e.target.value)}
-                          className="input-field text-sm py-2"
+                          disabled={updatingOrderId === order.id}
+                          className={`input-field text-sm py-2 ${updatingOrderId === order.id ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                           {statusOptions.map((status) => (
                             <option key={status.value} value={status.value}>

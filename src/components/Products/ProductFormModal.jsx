@@ -1,5 +1,45 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { api } from '../../utils/api'
 import LoadingSpinner from '../UI/LoadingSpinner'
+import { useToast } from '../../contexts/ToastContext'
+
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5MB
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+
+function ImagePreview({ image, index, isPrimary, onSetPrimary, onRemove }) {
+  const previewUrl = useMemo(() => URL.createObjectURL(image), [image])
+
+  useEffect(() => {
+    return () => {
+      URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
+
+  return (
+    <div className="relative cursor-pointer group" onClick={() => onSetPrimary(index)}>
+      <img
+        src={previewUrl}
+        alt={`Preview ${index + 1}`}
+        className={`h-24 w-24 object-cover rounded-lg border ${isPrimary ? 'ring-4 ring-blue-500' : ''}`}
+      />
+      {isPrimary && (
+        <span className="absolute top-1 left-1 bg-blue-500 text-white text-xs px-1 rounded">Primary</span>
+      )}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          onRemove(index)
+        }}
+        className="absolute top-1 left-25 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow-lg z-10"
+      >
+        <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  )
+}
 
 export default function ProductFormModal({
   isOpen,
@@ -10,6 +50,7 @@ export default function ProductFormModal({
   onSubmit,
   submitting
 }) {
+  const toast = useToast()
   const [activeTab, setActiveTab] = useState('general')
   const [mainCategoryId, setMainCategoryId] = useState('')
   const [subcategoryId, setSubcategoryId] = useState('')
@@ -64,8 +105,30 @@ export default function ProductFormModal({
   }
 
   const [formData, setFormData] = useState(initialFormData)
+  const [franchises, setFranchises] = useState([])
+  const [selectedFranchises, setSelectedFranchises] = useState([])
   const prevEditingProductIdRef = useRef(null)
   const prevIsOpenRef = useRef(false)
+
+  // Fetch franchises list
+  useEffect(() => {
+    if (isOpen) {
+      api.get('/admin/franchises').then(res => {
+        setFranchises(res.data || [])
+      }).catch(() => {})
+    }
+  }, [isOpen])
+
+  // Load existing franchise associations when editing
+  useEffect(() => {
+    if (isOpen && editingProduct?.id) {
+      api.get(`/admin/products/${editingProduct.id}/franchises`).then(res => {
+        setSelectedFranchises(res.data?.franchise_ids || [])
+      }).catch(() => setSelectedFranchises([]))
+    } else if (isOpen && !editingProduct) {
+      setSelectedFranchises([])
+    }
+  }, [isOpen, editingProduct?.id])
 
   // Main categories are all categories
   const mainCategories = categories
@@ -317,6 +380,11 @@ export default function ProductFormModal({
     data.append('pack_size', formData.pack_size)
     data.append('brand', formData.brand)
 
+    // Franchise associations
+    if (selectedFranchises.length > 0) {
+      data.append('franchise_ids', selectedFranchises.join(','))
+    }
+
     let imagesToUpload = [...formData.images]
     if (primaryNewImageIndex !== null && primaryNewImageIndex > 0) {
       const primaryImage = imagesToUpload[primaryNewImageIndex]
@@ -347,6 +415,7 @@ export default function ProductFormModal({
     setImagesToDelete([])
     setPrimaryImageId(null)
     setPrimaryNewImageIndex(null)
+    setSelectedFranchises([])
     setFileInputKey(Date.now())
     setActiveTab('general')
   }
@@ -516,6 +585,38 @@ export default function ProductFormModal({
                       </div>
                     </div>
                   </div>
+                  {/* Franchise Associations */}
+                  {franchises.length > 0 && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Assign to Franchises
+                      </label>
+                      <div className="border border-gray-300 rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                        {franchises.map((franchise) => (
+                          <label key={franchise.id} className="flex items-center text-sm cursor-pointer hover:bg-gray-50 p-1 rounded">
+                            <input
+                              type="checkbox"
+                              checked={selectedFranchises.includes(franchise.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedFranchises([...selectedFranchises, franchise.id])
+                                } else {
+                                  setSelectedFranchises(selectedFranchises.filter(id => id !== franchise.id))
+                                }
+                              }}
+                              className="mr-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                            />
+                            <span className="text-gray-700">{franchise.name}</span>
+                            {franchise.city && <span className="text-gray-400 ml-1">({franchise.city})</span>}
+                          </label>
+                        ))}
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">
+                        {selectedFranchises.length} franchise{selectedFranchises.length !== 1 ? 's' : ''} selected
+                      </p>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700">
                       Product Images <span className="text-red-500">*</span>
@@ -528,12 +629,28 @@ export default function ProductFormModal({
                       required={!editingProduct && formData.images.length === 0}
                       onChange={(e) => {
                         const files = Array.from(e.target.files)
+                        const validFiles = []
+                        for (const file of files) {
+                          if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+                            toast.error(`"${file.name}" is not a supported image type. Use JPEG, PNG, WebP, or GIF.`)
+                            continue
+                          }
+                          if (file.size > MAX_IMAGE_SIZE) {
+                            toast.error(`"${file.name}" exceeds the 5MB size limit.`)
+                            continue
+                          }
+                          validFiles.push(file)
+                        }
+                        if (validFiles.length === 0) {
+                          setFileInputKey(Date.now())
+                          return
+                        }
                         if (formData.images.length === 0 && primaryNewImageIndex === null && (!formData.existingImages || formData.existingImages.length === 0)) {
                           setPrimaryNewImageIndex(0)
                         }
-                        setFormData({ ...formData, images: [...formData.images, ...files] })
+                        setFormData({ ...formData, images: [...formData.images, ...validFiles] })
                         setFileInputKey(Date.now())
-                        if (formErrors.images && files.length > 0) {
+                        if (formErrors.images && validFiles.length > 0) {
                           setFormErrors({ ...formErrors, images: '' })
                         }
                       }}
@@ -579,38 +696,26 @@ export default function ProductFormModal({
                           </div>
                         ))}
                         {formData.images.map((image, index) => (
-                          <div key={`new-${index}`} className="relative cursor-pointer group" onClick={() => setPrimaryNewImageIndex(index)}>
-                            <img
-                              src={URL.createObjectURL(image)}
-                              alt={`Preview ${index + 1}`}
-                              className={`h-24 w-24 object-cover rounded-lg border ${primaryNewImageIndex === index ? 'ring-4 ring-blue-500' : ''}`}
-                            />
-                            {primaryNewImageIndex === index && (
-                              <span className="absolute top-1 left-1 bg-blue-500 text-white text-xs px-1 rounded">Primary</span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                const newImages = formData.images.filter((_, i) => i !== index)
-                                setFormData({ ...formData, images: newImages })
-                                if (primaryNewImageIndex === index) {
-                                  if (newImages.length > 0) {
-                                    setPrimaryNewImageIndex(0)
-                                  } else {
-                                    setPrimaryNewImageIndex(null)
-                                  }
-                                } else if (primaryNewImageIndex > index) {
-                                  setPrimaryNewImageIndex(primaryNewImageIndex - 1)
+                          <ImagePreview
+                            key={`new-${index}`}
+                            image={image}
+                            index={index}
+                            isPrimary={primaryNewImageIndex === index}
+                            onSetPrimary={(i) => setPrimaryNewImageIndex(i)}
+                            onRemove={(i) => {
+                              const newImages = formData.images.filter((_, idx) => idx !== i)
+                              setFormData({ ...formData, images: newImages })
+                              if (primaryNewImageIndex === i) {
+                                if (newImages.length > 0) {
+                                  setPrimaryNewImageIndex(0)
+                                } else {
+                                  setPrimaryNewImageIndex(null)
                                 }
-                              }}
-                              className="absolute top-1 left-25 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 shadow-lg z-10"
-                            >
-                              <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </div>
+                              } else if (primaryNewImageIndex > i) {
+                                setPrimaryNewImageIndex(primaryNewImageIndex - 1)
+                              }
+                            }}
+                          />
                         ))}
                       </div>
                     ) : null}

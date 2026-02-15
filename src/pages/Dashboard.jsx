@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { api } from '../utils/api'
 import { useToast } from '../contexts/ToastContext'
 import { SkeletonCard } from '../components/UI/Skeleton'
@@ -11,6 +11,7 @@ import {
   CurrencyDollarIcon,
   ArrowTrendingUpIcon,
   ClockIcon,
+  BuildingStorefrontIcon,
 } from '@heroicons/react/24/outline'
 
 export default function Dashboard() {
@@ -19,60 +20,52 @@ export default function Dashboard() {
     totalProducts: 0,
     totalOrders: 0,
     totalCategories: 0,
+    totalFranchises: 0,
     totalRevenue: 0,
     recentRevenue: 0,
     pendingOrders: 0,
   })
   const [recentOrders, setRecentOrders] = useState([])
+  const [franchises, setFranchises] = useState([])
+  const [selectedFranchiseId, setSelectedFranchiseId] = useState('')
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetchStats()
-  }, [])
-
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       setLoading(true)
-      const [productsRes, ordersRes, categoriesRes] = await Promise.all([
-        api.get('/admin/products?limit=1'),
-        api.get('/orders'),
-        api.get('/categories'),
+
+      const franchiseParam = selectedFranchiseId ? `?franchise_id=${selectedFranchiseId}` : ''
+
+      // Fetch dashboard stats and franchises list in parallel
+      const [dashboardRes, franchisesRes] = await Promise.all([
+        api.get(`/admin/dashboard${franchiseParam}`),
+        api.get('/admin/franchises'),
       ])
 
-      const orders = ordersRes.data || []
-      const totalRevenue = orders.reduce((sum, order) => sum + (order.total || 0), 0)
-      
-      // Calculate recent revenue (last 7 days)
-      const sevenDaysAgo = new Date()
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-      const recentOrdersList = orders.filter(
-        (order) => new Date(order.created_at) >= sevenDaysAgo
-      )
-      const recentRevenue = recentOrdersList.reduce((sum, order) => sum + (order.total || 0), 0)
-
-      // Get pending orders
-      const pendingOrders = orders.filter((order) => order.status === 'pending').length
-
-      // Get recent orders (last 10)
-      const sortedOrders = [...orders].sort(
-        (a, b) => new Date(b.created_at) - new Date(a.created_at)
-      )
-      setRecentOrders(sortedOrders.slice(0, 10))
+      const data = dashboardRes.data
+      const allFranchises = franchisesRes.data || []
+      setFranchises(allFranchises)
+      setRecentOrders(data.recent_orders || [])
 
       setStats({
-        totalProducts: productsRes.data?.total || productsRes.data?.products?.length || 0,
-        totalOrders: orders.length,
-        totalCategories: categoriesRes.data?.length || 0,
-        totalRevenue,
-        recentRevenue,
-        pendingOrders,
+        totalProducts: data.total_products || 0,
+        totalOrders: data.total_orders || 0,
+        totalCategories: data.total_categories || 0,
+        totalFranchises: data.total_franchises || allFranchises.length,
+        totalRevenue: data.total_revenue || 0,
+        recentRevenue: data.recent_revenue || 0,
+        pendingOrders: data.pending_orders || 0,
       })
     } catch (error) {
       toast.error(error.message || 'Failed to fetch dashboard stats')
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedFranchiseId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    fetchStats()
+  }, [fetchStats])
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleString('en-GB', {
@@ -101,7 +94,7 @@ export default function Dashboard() {
       <div>
         <h1 className="text-3xl font-bold text-gray-900 mb-8">Dashboard</h1>
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-          {[1, 2, 3, 4].map((i) => (
+          {[1, 2, 3, 4, 5].map((i) => (
             <SkeletonCard key={i} />
           ))}
         </div>
@@ -116,13 +109,28 @@ export default function Dashboard() {
           <h1 className="text-4xl font-bold text-gray-900 mb-2">Dashboard</h1>
           <p className="text-gray-600">Welcome back! Here's what's happening today.</p>
         </div>
-        <button
-          onClick={fetchStats}
-          className="btn-secondary"
-        >
-          <ClockIcon className="h-4 w-4 mr-2" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <BuildingStorefrontIcon className="h-4 w-4 text-gray-500" />
+            <select
+              value={selectedFranchiseId}
+              onChange={(e) => setSelectedFranchiseId(e.target.value)}
+              className="input-field text-sm py-2 pr-8"
+            >
+              <option value="">All Franchises</option>
+              {franchises.map((f) => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={fetchStats}
+            className="btn-secondary"
+          >
+            <ClockIcon className="h-4 w-4 mr-2" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
@@ -189,6 +197,27 @@ export default function Dashboard() {
                 </dt>
                 <dd className="text-3xl font-bold text-gray-900 mt-1">
                   {stats.totalCategories}
+                </dd>
+              </dl>
+            </div>
+          </div>
+        </Link>
+
+        <Link
+          to="/franchises"
+          className="stat-card group"
+        >
+          <div className="flex items-center">
+            <div className="flex-shrink-0 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl p-4 shadow-lg group-hover:scale-110 transition-transform duration-200">
+              <BuildingStorefrontIcon className="h-7 w-7 text-white" />
+            </div>
+            <div className="ml-5 w-0 flex-1">
+              <dl>
+                <dt className="text-sm font-medium text-gray-600 truncate">
+                  Franchises
+                </dt>
+                <dd className="text-3xl font-bold text-gray-900 mt-1">
+                  {stats.totalFranchises}
                 </dd>
               </dl>
             </div>

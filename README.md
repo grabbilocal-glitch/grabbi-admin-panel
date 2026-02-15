@@ -28,8 +28,7 @@ The admin panel will start on port 5174.
 
 ## Default Admin Credentials
 
-- Email: admin@grabbi.com
-- Password: admin123
+Default admin credentials are configured via environment variables (ADMIN_EMAIL, ADMIN_PASSWORD) on the backend.
 
 ## Features
 

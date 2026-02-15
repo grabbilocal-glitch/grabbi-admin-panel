@@ -96,3 +96,14 @@
     @apply bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto;
   }
 }
+
+/* Leaflet + Tailwind compatibility */
+.leaflet-container img {
+  max-width: none !important;
+  max-height: none !important;
+}
+
+.leaflet-container {
+  font-family: inherit;
+  z-index: 0;
+}

@@ -1,10 +1,39 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { api } from '../utils/api'
 import { PencilIcon, TrashIcon, PlusIcon, MegaphoneIcon } from '@heroicons/react/24/outline'
 import { useToast } from '../contexts/ToastContext'
 import LoadingSpinner from '../components/UI/LoadingSpinner'
 import { SkeletonList } from '../components/UI/Skeleton'
 import ConfirmDialog from '../components/UI/ConfirmDialog'
+
+function PromotionImagePreview({ image }) {
+  const previewUrl = useMemo(() => {
+    if (image instanceof File) {
+      return URL.createObjectURL(image)
+    }
+    return null
+  }, [image])
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl)
+      }
+    }
+  }, [previewUrl])
+
+  if (!previewUrl) return null
+
+  return (
+    <div className="mt-3">
+      <img
+        src={previewUrl}
+        alt="Preview"
+        className="h-48 w-full object-cover rounded-lg border"
+      />
+    </div>
+  )
+}
 
 export default function Promotions() {
   const toast = useToast()
@@ -21,23 +50,25 @@ export default function Promotions() {
     image: null,
     is_active: true,
     product_url: '',
+    start_date: '',
+    end_date: '',
   })
 
-  useEffect(() => {
-    fetchPromotions()
-  }, [])
-
-  const fetchPromotions = async () => {
+  const fetchPromotions = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await api.get('/promotions')
+      const response = await api.get('/admin/promotions')
       setPromotions(response.data || [])
     } catch (error) {
       toast.error(error.message || 'Failed to fetch promotions')
     } finally {
       setLoading(false)
     }
-  }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    fetchPromotions()
+  }, [fetchPromotions])
 
   const validateForm = () => {
     const errors = {}
@@ -46,6 +77,9 @@ export default function Promotions() {
     if (!editingPromotion && !formData.image) {
     errors.image = 'Image is required'
   }
+    if (formData.start_date && formData.end_date && new Date(formData.end_date) <= new Date(formData.start_date)) {
+      errors.end_date = 'End date must be after start date'
+    }
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -65,6 +99,8 @@ export default function Promotions() {
       payload.append('description', formData.description)
       payload.append('is_active', formData.is_active)
       payload.append('product_url', formData.product_url)
+      if (formData.start_date) payload.append('start_date', formData.start_date)
+      if (formData.end_date) payload.append('end_date', formData.end_date)
 
       if (formData.image instanceof File) {
         payload.append('image', formData.image)
@@ -100,6 +136,8 @@ export default function Promotions() {
       image: null,
       is_active: promotion.is_active,
       product_url: promotion.product_url || '',
+      start_date: promotion.start_date ? promotion.start_date.slice(0, 10) : '',
+      end_date: promotion.end_date ? promotion.end_date.slice(0, 10) : '',
     })
     setShowModal(true)
   }
@@ -118,7 +156,7 @@ export default function Promotions() {
   }
 
   const resetForm = () => {
-    setFormData({ title: '', description: '', image: '', is_active: true, product_url: '' })
+    setFormData({ title: '', description: '', image: '', is_active: true, product_url: '', start_date: '', end_date: '' })
     setEditingPromotion(null)
     setFormErrors({})
   }
@@ -184,15 +222,24 @@ export default function Promotions() {
                     <p className="text-sm text-gray-600 mt-1">
                       {promotion.description}
                     </p>
-                    <span
-                      className={`badge mt-2 ${
-                        promotion.is_active
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}
-                    >
-                      {promotion.is_active ? 'Active' : 'Inactive'}
-                    </span>
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <span
+                        className={`badge ${
+                          promotion.is_active
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
+                        {promotion.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                      {(promotion.start_date || promotion.end_date) && (
+                        <span className="text-xs text-gray-500">
+                          {promotion.start_date ? new Date(promotion.start_date).toLocaleDateString('en-GB', { month: 'short', day: 'numeric', year: 'numeric' }) : '...'}{' '}
+                          &mdash;{' '}
+                          {promotion.end_date ? new Date(promotion.end_date).toLocaleDateString('en-GB', { month: 'short', day: 'numeric', year: 'numeric' }) : '...'}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="flex space-x-2">
@@ -294,15 +341,7 @@ export default function Promotions() {
                     )}
 
                     {/* New uploaded image preview */}
-                    {formData.image instanceof File && (
-                      <div className="mt-3">
-                        <img
-                          src={URL.createObjectURL(formData.image)}
-                          alt="Preview"
-                          className="h-48 w-full object-cover rounded-lg border"
-                        />
-                      </div>
-                    )}
+                    <PromotionImagePreview image={formData.image} />
 
                     {/* Existing image preview (edit mode) */}
                     {!formData.image && editingPromotion?.image && (
@@ -335,6 +374,40 @@ export default function Promotions() {
                     <p className="mt-1 text-sm text-gray-500">
                       Enter a URL where users will be directed when they click this promotion
                     </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        Start Date
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.start_date}
+                        onChange={(e) => {
+                          setFormData({ ...formData, start_date: e.target.value })
+                          if (formErrors.end_date) setFormErrors({ ...formErrors, end_date: '' })
+                        }}
+                        className="input-field mt-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">
+                        End Date
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.end_date}
+                        onChange={(e) => {
+                          setFormData({ ...formData, end_date: e.target.value })
+                          if (formErrors.end_date) setFormErrors({ ...formErrors, end_date: '' })
+                        }}
+                        className={`input-field mt-2 ${formErrors.end_date ? 'input-field-error' : ''}`}
+                      />
+                      {formErrors.end_date && (
+                        <p className="mt-1 text-sm text-red-600">{formErrors.end_date}</p>
+                      )}
+                    </div>
                   </div>
 
                   <div>

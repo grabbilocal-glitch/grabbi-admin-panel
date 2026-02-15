@@ -46,7 +46,9 @@ export default function Toast({ type = 'success', message, duration = 3000, onCl
 
   return (
     <div
-      className={`fixed top-4 right-4 z-[100] max-w-md w-full transform transition-all duration-300 ${
+      role="alert"
+      aria-live="assertive"
+      className={`max-w-md w-full transform transition-all duration-300 ${
         isAnimating ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
       }`}
     >

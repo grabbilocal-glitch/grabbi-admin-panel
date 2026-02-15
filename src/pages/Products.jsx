@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../utils/api'
 import { PencilIcon, TrashIcon, PlusIcon, MagnifyingGlassIcon, FunnelIcon, CubeIcon, ExclamationTriangleIcon, GlobeAltIcon, EyeSlashIcon } from '@heroicons/react/24/outline'
 import { useToast } from '../contexts/ToastContext'
@@ -23,6 +23,8 @@ export default function Products() {
   const [stockFilter, setStockFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [dietaryFilter, setDietaryFilter] = useState('all')
+  const [franchiseFilter, setFranchiseFilter] = useState('')
+  const [franchises, setFranchises] = useState([])
   const [showFilters, setShowFilters] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalProducts, setTotalProducts] = useState(0)
@@ -41,35 +43,43 @@ export default function Products() {
     errors: []
   })
 
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     try {
-      const [categoriesRes, subcategoriesRes] = await Promise.all([
+      const [categoriesRes, subcategoriesRes, franchisesRes] = await Promise.all([
         api.get('/categories'),
-        api.get('/subcategories')
+        api.get('/subcategories'),
+        api.get('/admin/franchises'),
       ])
       setCategories(categoriesRes.data || [])
       setSubcategories(subcategoriesRes.data || [])
+      setFranchises(franchisesRes.data || [])
     } catch (error) {
-      console.error('Failed to fetch categories:', error)
+      toast.error(error.message || 'Failed to fetch categories')
     }
-  }
+  }, [toast])
 
   useEffect(() => {
     fetchCategories()
-  }, [])
+  }, [fetchCategories])
 
   useEffect(() => {
     setCurrentPage(1)
-  }, [categoryFilter, stockFilter, statusFilter, dietaryFilter])
+  }, [categoryFilter, stockFilter, statusFilter, dietaryFilter, franchiseFilter])
 
-  const fetchProducts = async () => {
+  // searchTerm is read via ref to avoid re-fetching on every keystroke.
+  // Search is triggered explicitly by pressing Enter or changing filters/page.
+  const searchTermRef = useRef(searchTerm)
+  searchTermRef.current = searchTerm
+
+  const fetchProducts = useCallback(async () => {
     try {
       setLoading(true)
       const params = new URLSearchParams()
       params.append('limit', pageLimit.toString())
       params.append('page', currentPage.toString())
-      if (searchTerm) params.append('search', searchTerm)
+      if (searchTermRef.current) params.append('search', searchTermRef.current)
       if (categoryFilter) params.append('category_id', categoryFilter)
+      if (franchiseFilter) params.append('franchise_id', franchiseFilter)
       if (statusFilter !== 'all') params.append('status', statusFilter)
 
       const response = await api.get(`/admin/products?${params.toString()}`)
@@ -119,24 +129,23 @@ export default function Products() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [currentPage, categoryFilter, franchiseFilter, statusFilter, dietaryFilter, stockFilter, pageLimit, toast])
 
   useEffect(() => {
     fetchProducts()
-  }, [currentPage, categoryFilter, statusFilter, dietaryFilter, stockFilter])
+  }, [fetchProducts])
 
   const fetchAllProducts = async () => {
     try {
       const response = await api.get('/admin/products/export')
       const allProducts = Array.isArray(response.data) ? response.data : (response.data.products || [])
-      
+
       setProducts(allProducts.slice(0, pageLimit))
       setTotalProducts(allProducts.length)
       setCurrentPage(1)
       toast.success(`Product list updated: ${allProducts.length} products`)
     } catch (error) {
-      console.error('Failed to fetch all products:', error)
-      toast.error('Failed to refresh products')
+      toast.error(error.message || 'Failed to refresh products')
     }
   }
 
@@ -298,12 +307,24 @@ export default function Products() {
                   <option value="vegan">Vegan</option>
                 </select>
               </div>
+              {franchises.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Franchise</label>
+                  <select value={franchiseFilter} onChange={(e) => setFranchiseFilter(e.target.value)} className="input-field">
+                    <option value="">All Franchises</option>
+                    {franchises.map((f) => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
-            {(categoryFilter || stockFilter !== 'all' || statusFilter !== 'all' || dietaryFilter !== 'all' || searchTerm) && (
+            {(categoryFilter || franchiseFilter || stockFilter !== 'all' || statusFilter !== 'all' || dietaryFilter !== 'all' || searchTerm) && (
               <div className="mt-4">
                 <button
                   onClick={() => {
                     setCategoryFilter('')
+                    setFranchiseFilter('')
                     setStockFilter('all')
                     setStatusFilter('all')
                     setDietaryFilter('all')
@@ -545,7 +566,7 @@ export default function Products() {
                 {batchProgress.errors && batchProgress.errors.length > 0 && (
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-gray-900 mb-2">Errors ({batchProgress.errors.length})</h4>
-                    <div className="max-h-48 overflow-y-auto bg-red-50 border border border-red-200 rounded-lg p-3">
+                    <div className="max-h-48 overflow-y-auto bg-red-50 border border-red-200 rounded-lg p-3">
                       <ul className="text-sm text-red-700 space-y-1">
                         {batchProgress.errors.map((error, index) => (
                           <li key={index} className="flex items-start">

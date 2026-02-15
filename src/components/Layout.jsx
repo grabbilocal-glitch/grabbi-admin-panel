@@ -6,6 +6,8 @@ import {
   ShoppingBagIcon,
   TagIcon,
   MegaphoneIcon,
+  BuildingStorefrontIcon,
+  UserGroupIcon,
   ArrowRightOnRectangleIcon,
   Bars3Icon,
   XMarkIcon,
@@ -19,8 +21,10 @@ export default function Layout({ onLogout }) {
     { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
     { name: 'Products', href: '/products', icon: CubeIcon },
     { name: 'Orders', href: '/orders', icon: ShoppingBagIcon },
+    { name: 'Franchises', href: '/franchises', icon: BuildingStorefrontIcon },
     { name: 'Categories', href: '/categories', icon: TagIcon },
     { name: 'Promotions', href: '/promotions', icon: MegaphoneIcon },
+    { name: 'Users', href: '/users', icon: UserGroupIcon },
   ]
 
   return (
@@ -69,7 +73,7 @@ export default function Layout({ onLogout }) {
             <div className="flex-grow flex flex-col overflow-y-auto">
               <nav className="flex-1 px-3 py-6 space-y-1.5">
                 {navigation.map((item) => {
-                  const isActive = location.pathname === item.href
+                  const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + '/')
                   return (
                     <Link
                       key={item.name}
