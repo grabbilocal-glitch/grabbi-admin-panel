@@ -17,6 +17,7 @@ export default function Products() {
   const [showModal, setShowModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, productId: null })
+  const [deleting, setDeleting] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -153,12 +154,15 @@ export default function Products() {
     if (!deleteConfirm.productId) return
 
     try {
+      setDeleting(true)
       await api.delete(`/admin/products/${deleteConfirm.productId}`)
       fetchProducts()
-      toast.success('Product deleted successfully')
+      toast.success('Product delisted successfully')
       setDeleteConfirm({ isOpen: false, productId: null })
     } catch (error) {
       toast.error(error.message || 'Failed to delete product')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -212,6 +216,7 @@ export default function Products() {
             <ProductImportExport
               categories={categories}
               subcategories={subcategories}
+              franchises={franchises}
               onExportComplete={(data) => {
                 if (data.loading !== undefined) setLoading(data.loading)
               }}
@@ -606,11 +611,13 @@ export default function Products() {
         isOpen={deleteConfirm.isOpen}
         onClose={() => setDeleteConfirm({ isOpen: false, productId: null })}
         onConfirm={handleDelete}
-        title="Delete Product"
-        message="Are you sure you want to delete this product? This action cannot be undone."
-        confirmText="Delete"
+        title="Delist Product"
+        message="Are you sure you want to delist this product? The product will be removed from the online catalog."
+        confirmText="Delist"
         cancelText="Cancel"
         type="danger"
+        loading={deleting}
+        loadingText="Delisting..."
       />
     </div>
   )

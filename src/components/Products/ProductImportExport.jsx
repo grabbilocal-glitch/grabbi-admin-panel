@@ -5,7 +5,7 @@ import ExcelJS from 'exceljs'
 import * as XLSX from 'xlsx'
 import { DocumentArrowDownIcon, DocumentArrowUpIcon } from '@heroicons/react/24/outline'
 
-export default function ProductImportExport({ categories, subcategories, onImportComplete, onExportComplete }) {
+export default function ProductImportExport({ categories, subcategories, franchises, onImportComplete, onExportComplete }) {
   const toast = useToast()
   const pollingIntervalRef = useRef(null)
   const excelInputRef = useRef(null)
@@ -42,7 +42,7 @@ export default function ProductImportExport({ categories, subcategories, onImpor
         'Supplier', 'Country of Origin', 'Brand', 'Pack Size',
         'Gluten Free', 'Vegetarian', 'Vegan', 'Age Restricted', 'Minimum Age',
         'Allergen Info', 'Storage Type', 'Own Brand', 'Online Visible', 'Status',
-        'Barcode', 'Batch Number', 'Category*', 'Subcategory', 'Franchise', 'Image URLs (add each URL after a new line)', 'Notes'
+        'Barcode', 'Batch Number', 'Category*', 'Subcategory', 'Franchises', 'Image URLs (add each URL after a new line)', 'Notes'
       ]
       worksheet.addRow(headers)
 
@@ -154,7 +154,7 @@ export default function ProductImportExport({ categories, subcategories, onImpor
           product.batch_number || '',
           product.category?.name || product.category_id || '',
           subcategoryName,
-          '', // Franchise - populated by user
+          product.franchise_names || '',
           imageUrls,
           product.notes || '',
         ])
@@ -308,6 +308,23 @@ export default function ProductImportExport({ categories, subcategories, onImpor
 
           const validProducts = []
           const errors = []
+
+          // Helper function to find a column value by name (handles whitespace variations)
+          const findColumnValue = (rowObj, columnNames) => {
+            const normalizedRow = {}
+            // Normalize all keys by trimming whitespace
+            Object.keys(rowObj).forEach(key => {
+              normalizedRow[key.trim()] = rowObj[key]
+            })
+            // Try each possible column name
+            for (const colName of columnNames) {
+              const trimmed = colName.trim()
+              if (normalizedRow[trimmed] !== undefined) {
+                return normalizedRow[trimmed]
+              }
+            }
+            return undefined
+          }
 
           for (let i = 0; i < jsonData.length; i++) {
             const row = jsonData[i]
@@ -475,9 +492,28 @@ export default function ProductImportExport({ categories, subcategories, onImpor
                   : null,
                 image_urls: imageUrls,
                 images_provided: true,
-                franchise_ids: row['Franchise']
-                  ? String(row['Franchise']).split(',').map(f => f.trim()).filter(Boolean)
-                  : [],
+                franchise_ids: (() => {
+                  // Use findColumnValue to handle whitespace in column names
+                  const franchiseColumn = findColumnValue(row, ['Franchises', 'Franchise']) || ''
+                  if (!franchiseColumn) return []
+                  if (!franchises || franchises.length === 0) {
+                    return []
+                  }
+                  const franchiseNames = String(franchiseColumn).split(/[,\n]+/).map(f => f.trim()).filter(Boolean)
+                  // Map franchise names to franchise IDs
+                  const matchedIds = franchiseNames
+                    .map(name => {
+                      const franchise = franchises.find(f => 
+                        f.name.toLowerCase() === name.toLowerCase()
+                      )
+                      if (!franchise) {
+                        console.warn(`Franchise "${name}" not found in franchises list`)
+                      }
+                      return franchise?.id
+                    })
+                    .filter(id => id) // Remove any undefined/null values
+                  return matchedIds
+                })(),
                 notes: row['Notes'] || '',
                 delete: row['Delete?']?.toString().toLowerCase() === 'yes' || false,
               })
@@ -516,7 +552,10 @@ export default function ProductImportExport({ categories, subcategories, onImpor
             }
           })
 
-          const response = await api.post('/admin/products/batch', { products: validProducts })
+          const response = await api.post('/admin/products/batch', { 
+            products: validProducts,
+            delete_missing: true
+          })
           
           if (response.data.job_id) {
             onImportComplete?.({

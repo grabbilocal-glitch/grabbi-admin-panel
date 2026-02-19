@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { api } from '../../utils/api'
 import LoadingSpinner from '../UI/LoadingSpinner'
 import { useToast } from '../../contexts/ToastContext'
@@ -7,13 +7,18 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 
 function ImagePreview({ image, index, isPrimary, onSetPrimary, onRemove }) {
-  const previewUrl = useMemo(() => URL.createObjectURL(image), [image])
+  const [previewUrl, setPreviewUrl] = useState(null)
 
   useEffect(() => {
+    const url = URL.createObjectURL(image)
+    setPreviewUrl(url)
+    
     return () => {
-      URL.revokeObjectURL(previewUrl)
+      URL.revokeObjectURL(url)
     }
-  }, [previewUrl])
+  }, [image])
+
+  if (!previewUrl) return null
 
   return (
     <div className="relative cursor-pointer group" onClick={() => onSetPrimary(index)}>
@@ -663,7 +668,10 @@ export default function ProductFormModal({
                     ) : ((editingProduct && formData.existingImages && formData.existingImages.length > 0) || formData.images.length > 0) ? (
                       <div className="mt-3 grid grid-cols-4 gap-2">
                         {editingProduct && formData.existingImages && formData.existingImages.map((image) => (
-                          <div key={image.id} className="relative cursor-pointer group" onClick={() => setPrimaryImageId(image.id)}>
+                          <div key={image.id} className="relative cursor-pointer group" onClick={() => {
+                            setPrimaryImageId(image.id)
+                            setPrimaryNewImageIndex(null)
+                          }}>
                             <img
                               src={image.image_url}
                               alt={image.id}
@@ -701,7 +709,10 @@ export default function ProductFormModal({
                             image={image}
                             index={index}
                             isPrimary={primaryNewImageIndex === index}
-                            onSetPrimary={(i) => setPrimaryNewImageIndex(i)}
+                            onSetPrimary={(i) => {
+                              setPrimaryNewImageIndex(i)
+                              setPrimaryImageId(null)
+                            }}
                             onRemove={(i) => {
                               const newImages = formData.images.filter((_, idx) => idx !== i)
                               setFormData({ ...formData, images: newImages })

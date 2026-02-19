@@ -638,7 +638,7 @@ export default function Franchises() {
         onClose={() => setDeleteConfirm({ isOpen: false, franchiseId: null })}
         onConfirm={handleDelete}
         title="Delete Franchise"
-        message="Are you sure you want to delete this franchise? This will remove all associated data and cannot be undone."
+        message="Are you sure you want to delete this franchise? This will remove all associated products data and cannot be undone."
         confirmText="Delete"
         cancelText="Cancel"
         type="danger"

@@ -74,13 +74,13 @@ export default function OrderDetails({ order, isExpanded, onToggle }) {
                       {item.image_url ? (
                         <img
                           src={item.image_url}
-                          alt={item.product?.name || 'Product'}
+                          alt={item.product_name}
                           className="h-12 w-12 object-cover rounded-md mr-3"
                         />
                       ) : item.product?.images && item.product.images.length > 0 ? (
                         <img
                           src={item.product.images[0].image_url}
-                          alt={item.product.name}
+                          alt={item.product.product_name}
                           className="h-12 w-12 object-cover rounded-md mr-3"
                         />
                       ) : (
@@ -90,7 +90,7 @@ export default function OrderDetails({ order, isExpanded, onToggle }) {
                       )}
                       <div>
                         <p className="text-sm font-medium text-gray-900">
-                          {item.product?.name || 'Product'}
+                          {item.product_name || 'Product'}
                         </p>
                         <p className="text-xs text-gray-500">
                           Quantity: {item.quantity} × £{item.price?.toFixed(2) || '0.00'}

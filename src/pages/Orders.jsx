@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { api } from '../utils/api'
 import { useToast } from '../contexts/ToastContext'
 import { SkeletonList } from '../components/UI/Skeleton'
-import { MagnifyingGlassIcon, FunnelIcon, ShoppingBagIcon } from '@heroicons/react/24/outline'
+import { MagnifyingGlassIcon, FunnelIcon, ShoppingBagIcon, UserIcon, MapPinIcon, BuildingStorefrontIcon } from '@heroicons/react/24/outline'
 import OrderDetails from '../components/Orders/OrderDetails'
 
 const statusOptions = [
@@ -257,19 +257,34 @@ export default function Orders() {
                             {statusBadge.label}
                           </span>
                         </div>
-                        <div className="mt-2 space-y-1">
+                        <div className="mt-3 space-y-2">
                           <p className="text-sm text-gray-500">
-                            {formatDate(order.created_at)}
+                            {formatDate(order.created_at)} • {order.items?.length || 0} items
                           </p>
-                          <p className="text-sm text-gray-600">
-                            {order.items?.length || 0} items • {order.user?.name || 'Customer'} • {order.delivery_address}
-                          </p>
+                          
+                          {/* Customer Name */}
+                          <div className="flex items-center text-sm">
+                            <UserIcon className="h-4 w-4 text-gray-400 mr-2 flex-shrink-0" />
+                            <span className="text-gray-500 mr-1.5">Customer:</span>
+                            <span className="text-gray-900 font-medium">{order.user?.name || 'N/A'}</span>
+                          </div>
+                          
+                          {/* Delivery Address */}
+                          <div className="flex items-start text-sm">
+                            <MapPinIcon className="h-4 w-4 text-gray-400 mr-2 mt-0.5 flex-shrink-0" />
+                            <span className="text-gray-500 mr-1.5">Delivery:</span>
+                            <span className="text-gray-900">{order.delivery_address || 'N/A'}</span>
+                          </div>
+                          
+                          {/* Franchise */}
                           {order.franchise && (
-                            <p className="text-sm text-gray-500">
+                            <div className="flex items-center text-sm">
+                              <BuildingStorefrontIcon className="h-4 w-4 text-gray-400 mr-2 flex-shrink-0" />
+                              <span className="text-gray-500 mr-1.5">Franchise:</span>
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-teal-100 text-teal-800">
                                 {order.franchise.name || 'Unknown Franchise'}
                               </span>
-                            </p>
+                            </div>
                           )}
                         </div>
                       </div>

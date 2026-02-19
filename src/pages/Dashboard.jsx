@@ -112,9 +112,12 @@ export default function Dashboard() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <BuildingStorefrontIcon className="h-4 w-4 text-gray-500" />
-            <select
+              <select
               value={selectedFranchiseId}
-              onChange={(e) => setSelectedFranchiseId(e.target.value)}
+              onChange={(e) => {
+                setLoading(true)
+                setSelectedFranchiseId(e.target.value)
+              }}
               className="input-field text-sm py-2 pr-8"
             >
               <option value="">All Franchises</option>

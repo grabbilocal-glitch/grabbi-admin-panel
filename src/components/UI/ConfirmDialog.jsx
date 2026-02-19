@@ -1,4 +1,5 @@
 import { XMarkIcon } from '@heroicons/react/24/outline'
+import LoadingSpinner from './LoadingSpinner'
 
 export default function ConfirmDialog({
   isOpen,
@@ -9,6 +10,8 @@ export default function ConfirmDialog({
   confirmText = 'Confirm',
   cancelText = 'Cancel',
   type = 'danger',
+  loading = false,
+  loadingText = 'Processing...',
 }) {
   if (!isOpen) return null
 
@@ -18,9 +21,8 @@ export default function ConfirmDialog({
     info: 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500',
   }
 
-  const handleConfirm = () => {
-    onConfirm()
-    onClose()
+  const handleConfirm = async () => {
+    await onConfirm()
   }
 
   return (
@@ -28,7 +30,7 @@ export default function ConfirmDialog({
       <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
         <div
           className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
-          onClick={onClose}
+          onClick={loading ? undefined : onClose}
           aria-hidden="true"
         />
 
@@ -49,14 +51,17 @@ export default function ConfirmDialog({
             <button
               type="button"
               onClick={handleConfirm}
-              className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white ${buttonColors[type]} focus:outline-none focus:ring-2 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm`}
+              disabled={loading}
+              className={`w-full inline-flex justify-center items-center rounded-md border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white ${buttonColors[type]} focus:outline-none focus:ring-2 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
             >
-              {confirmText}
+              {loading && <LoadingSpinner size="sm" className="mr-2" />}
+              {loading ? loadingText : confirmText}
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+              disabled={loading}
+              className={`mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {cancelText}
             </button>
